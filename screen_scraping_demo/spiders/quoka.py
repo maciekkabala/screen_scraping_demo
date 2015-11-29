@@ -1,0 +1,178 @@
+'''
+Created on 28-11-2015
+
+@author: Maciej Kabala
+'''
+
+import scrapy
+from itertools import imap
+from screen_scraping_demo.items import Offer
+
+
+
+#My first screen scraping project
+
+class ParseError(Exception):
+    pass
+
+# First step after "scrapy startproject lot_test"
+class QuokaSpider(scrapy.Spider):
+    
+    name = "quoka"
+    allowed_domains = ["http://www.quoka.de"]
+    start_urls = [
+        "http://www.quoka.de/immobilien/bueros-gewerbeflaechen/",
+    ]
+    
+    xpath_offer_link = 'div[@class="q-col n2"]/a/@href'
+    xpath_offer_list = '//ul[@class="alist"]/li'
+    xpath_offer_title = '//div[@class="headline"]/h1[@itemprop="name"]/text()'
+    xpath_offer_price = '//div[@class="price has-type"]/strong/span/text()'
+    xpath_offer_address = '//div[@class="location"]/strong/span[@class="address location"]'
+#     NOT in specification => should not be implemented regarding strong scrum rules
+#     => only ordered "things" should be implemented => but this is obvious, a bug in specification
+#    there are offers in CH ... yes yes this is also a country ;-)  
+    xpath_offer_address_country = 'span/span[@class="country-name country"]/text()'
+    xpath_offer_address_postal_code = 'span/span[@class="postal-code"]/text()'
+    xpath_offer_address_city = 'a/span/text()'
+    xpath_offer_id = '//div[@class="data"]/div[@class="details"]/div[@class="date-and-clicks"]/strong/text()'
+    xpath_offer_date = '//div[@class="data"]/div[@class="details"]/div[@class="date-and-clicks"]/text()'
+    xpath_offer_detais = '//div[@class="data"]/div[@class="details"]'
+
+    def _default_form_request(self, url, callback_meth):
+        return scrapy.FormRequest(url, 
+                                 formdata={'classtype': 'of', 'com': 'all'}, #Lot time wasted searching how to do this. Very boring and not interesting task.
+                                 dont_filter=True, #this couse time, not mentioned in tutorial 
+                                 callback = callback_meth)
+
+    def _default_request(self, url, callback_meth):
+        return scrapy.Request(url,
+                              dont_filter=True, #easy to forget 
+                              callback=self.parse_offer)    
+
+    def parse(self, response):
+        """ Parse start site.
+            Send form request filtering offers only
+        """
+   
+        yield self._default_form_request(self.start_urls[0], self.parse_start_site_with_filter)
+
+      
+    def get_property_total_number(self, response):
+# #       crash xpath course
+# #       First impression:
+# #       xpath is interesting, but html site introspection is not
+        categoryList = response.xpath('//ul[@id="CategoryList"]')
+#       what is the proper programming model if len(categoryList) != 1?
+#       I suppose this is kind of contract violation => parser does not recognize site properly
+#       This means bug in parser or site schema is changed
+#       Exception raise is perhaps the right approach
+        if len(categoryList) != 1:
+            raise ParseError
+        
+        property_total_number_list = categoryList[0].xpath('li/ul/li/ul/li/span/text()').extract()
+        if len(property_total_number_list) != 1:
+            raise ParseError
+        
+        property_total_number = int(property_total_number_list[0].strip().replace('.','')) #fast hack
+        
+        return property_total_number
+
+    def parse_offer(self, response):
+        offer = Offer()
+        offer['title'] = response.xpath(self.xpath_offer_title).extract()[0]
+        offer['url'] = response.url
+        price_list = response.xpath(self.xpath_offer_price).extract()
+        if len(price_list) == 1:
+            offer['price'] = price_list[0].replace(',-','').replace('.','') #hack - regex should be better 
+        elif len(price_list) == 0:
+            offer['price'] = None
+        else:
+            raise ParseError
+        
+        address = response.xpath(self.xpath_offer_address)
+        offer['postal_code'] = address.xpath(self.xpath_offer_address_postal_code).extract_first()
+        offer['city'] = address.xpath(self.xpath_offer_address_city).extract_first()
+        
+        offer['obid'] = response.xpath(self.xpath_offer_id).extract_first().strip()
+        offer['details'] = response.xpath(self.xpath_offer_detais)[1].xpath('div/text()').extract_first()
+#         TODO: tel number
+
+#       response.xpath(self.xpath_offer_date).extract() contains list of strings, only one is non empty, and is date
+#       alternative implementetion => filter(lambda x: len(x) > 0, map(lambda x: x.strip(), response.xpath(self.xpath_offer_date).extract()))
+        date_list =  [item.strip() for item in response.xpath(self.xpath_offer_date).extract() if len(item.strip()) > 0]
+        if len(date_list) == 1:
+            offer['date'] = date_list[0] 
+            
+        yield offer
+
+    def _parse_offer_item(self, response, offer_item):
+        if 'q-ln toplist hlisting' in offer_item.xpath('@class').extract() or 'q-ln hlisting' in offer_item.xpath('@class').extract():
+            link_list = offer_item.xpath(self.xpath_offer_link)
+            if len(link_list) != 1:
+                raise ParseError
+            link = link_list[0].extract()
+            return self._default_request(response.urljoin(link), self.parse_offer)    
+             
+        elif 'q-ln t1 partner' in offer_item.xpath('@class').extract():
+            item = Offer()
+            item['title'] = 'partner'
+            return offer_item
+
+    def get_next_site(self, response):
+        next_site_list = response.xpath('//li[@class="arr-rgt active"]')
+        if len(next_site_list) == 1:
+            next_site = next_site_list[0]
+            return next_site.xpath('a/@href').extract()[0]
+#             parse next
+        elif len(next_site_list) > 1:
+            raise ParseError
+        else: #0
+            pass # do nothing, no next site
+
+    
+#     def parse_site(self, response):
+
+            
+    def parse_start_site_with_filter(self, response):
+ 
+        property_total_number = self.get_property_total_number(response)
+         
+#         filename = '/tmp/trace.html'
+#         with open(filename, 'wb') as f:
+#             f.write(response.body)
+        
+        result_list = response.xpath(self.xpath_offer_list)
+#         imap(self._parse_offer_item, result_list)
+# strange behavior, imap from itertools does not work! This framework do something strange under the bonnet!
+        for item in result_list:
+            res =  self._parse_offer_item(response, item)
+            if res != None:
+                yield res 
+        
+        next_page = self.get_next_site(response)
+#         if next_page != None:
+#             url = response.urljoin(next_page)
+#             req = scrapy.FormRequest(url,
+#                                  formdata={'classtype': 'of', 'com': 'all'},
+#                                  dont_filter=True, 
+#                                  callback = self.parse_start_site_with_filter)
+#                  
+#             yield req
+            
+        
+
+            
+#    !!! this framework is strange, if I use natural function composition like:
+
+#     def parse_start_site(self, reponse):
+#        do_start_specific_stuff
+#        self.parse_site(response)
+#
+#     def parse_site(self, reponse): 
+#        ...
+#        yield result
+#        if has_next:
+#            yield Request(next_url, callback=self.parse_site(
+# 
+#   this does not work, yield called from inner method does not work        
