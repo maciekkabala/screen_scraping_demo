@@ -22,6 +22,13 @@ class CleaningPipeline(object):
                 item['date'] = date.today().strftime(self.out_date_format)
             elif item['date'].lower().strip() == 'gestern':
                 item['date'] = (date.today()- timedelta(1)).strftime(self.out_date_format)
+            else: #for dates like 'vor 6 Monaten'
+                date_tuple = item['date']
+                if len(date_tuple) == 3:
+                    pass
+                else:
+                    item['date'] = None
+                 
         return item
 
 # ORM framework would be much better, especially for support.
@@ -66,7 +73,7 @@ class MySqlPipeline(object):
         if key in self.transformations:
             return self.transformations[key](value)
         else:
-            return '"' + value + '"'
+            return self.con.escape_string(value.encode('utf8', 'replace'))
 
     def _get_values_for_sql_insert(self, item):
         '''
@@ -100,12 +107,16 @@ class MySqlPipeline(object):
         return self.insert_command % self._get_values_for_sql_insert(item)
     
     def process_item(self, item, spider):
-        cur = self.con.cursor()
-        command = self._get_insert_command(item)
-        print command
-        cur.execute(command)
-        
-#      commit on close, or on process item?
-#      depends on requirement, without specific knowledge I commit at proccess_item
-        self.con.commit()        
+        try:
+            cur = self.con.cursor()
+            command = self._get_insert_command(item)
+    #         print command
+            cur.execute(command)
+            
+    #      commit on close, or on process item?
+    #      depends on requirement, without specific knowledge I commit at proccess_item
+            self.con.commit()
+        except db.Error, e:
+            print "Error %d: %s" % (e.args[0],e.args[1])
+                    
         return item

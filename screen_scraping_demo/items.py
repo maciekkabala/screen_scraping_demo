@@ -19,3 +19,4 @@ class Offer(scrapy.Item):
     obid = scrapy.Field()
     date = scrapy.Field()
     details = scrapy.Field()
+    commercial = scrapy.Field()

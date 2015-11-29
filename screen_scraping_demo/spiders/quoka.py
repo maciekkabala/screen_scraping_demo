@@ -41,12 +41,19 @@ class QuokaSpider(scrapy.Spider):
     xpath_offer_id = '//div[@class="data"]/div[@class="details"]/div[@class="date-and-clicks"]/strong/text()'
     xpath_offer_date = '//div[@class="data"]/div[@class="details"]/div[@class="date-and-clicks"]/text()'
     xpath_offer_details = '//div[@class="data"]/div[@class="details"]'
+    
+    category_commercial = '1'
+    category_private = '0'
 
-    def _default_form_request(self, url, callback_meth):
-        return scrapy.FormRequest(url, 
-                                 formdata={'classtype': 'of', 'comm': 'all'}, 
+    def _default_form_request(self, url, callback_meth, commercial):
+        
+        req = scrapy.FormRequest(url, 
+                                 formdata={'classtype': 'of', 'comm': commercial}, 
                                  dont_filter=True, #this costed time, not mentioned in tutorial 
                                  callback = callback_meth)
+        
+        req.meta['commercial'] = commercial
+        return req
 
     def _default_request(self, url, callback_meth):
         return scrapy.Request(url,
@@ -58,7 +65,8 @@ class QuokaSpider(scrapy.Spider):
             Send form request filtering offers only
         """
    
-        yield self._default_form_request(self.start_urls[0], self.parse_start_site_with_filter)
+        yield self._default_form_request(self.start_urls[0], self.parse_start_site_with_filter, self.category_commercial)
+#         yield self._default_form_request(self.start_urls[0], self.parse_start_site_with_filter, self.category_private)
 
       
     def get_property_total_number(self, response):
@@ -107,15 +115,18 @@ class QuokaSpider(scrapy.Spider):
         if len(date_list) == 1:
             offer['date'] = date_list[0] 
             
+        offer['commercial'] = response.meta['commercial']
         yield offer
 
     def _parse_offer_item(self, response, offer_item):
-        if 'q-ln toplist hlisting' in offer_item.xpath('@class').extract() or 'q-ln hlisting' in offer_item.xpath('@class').extract():
+        if 'q-ln hlisting' in offer_item.xpath('@class').extract():
             link_list = offer_item.xpath(self.xpath_offer_link)
             if len(link_list) != 1:
                 raise ParseError
             link = link_list[0].extract()
-            return self._default_request(response.urljoin(link), self.parse_offer)    
+            req =  self._default_request(response.urljoin(link), self.parse_offer)
+            req.meta.update(response.meta)
+            return req    
              
         elif 'q-ln t1 partner' in offer_item.xpath('@class').extract():
             item = Offer()
@@ -135,7 +146,7 @@ class QuokaSpider(scrapy.Spider):
             
     def parse_start_site_with_filter(self, response):
 
-        property_total_number = self.get_property_total_number(response)
+        property_total_number = self.get_property_total_number(response) #TODO always parsed, not only in start site!
  
          
         result_list = response.xpath(self.xpath_offer_list)
@@ -144,25 +155,20 @@ class QuokaSpider(scrapy.Spider):
         for item in result_list:
             res =  self._parse_offer_item(response, item)
             if res != None:
-                time.sleep(0.5) #ugly hack -> without I get: Error downloading <...>: An error occurred while connecting: 113: No route to host.
+                time.sleep(0.1) #ugly hack -> without I get: Error downloading <...>: An error occurred while connecting: 113: No route to host.
 # I suppose to many requests -> should be better solution than sleep                
                 yield res 
         
         next_page = self.get_next_site(response)
         if next_page != None:
             url = response.urljoin(next_page)
-            req = scrapy.FormRequest(url,
-                                 formdata={'classtype': 'of', 'com': 'all'},
-                                 dont_filter=True, 
-                                 callback = self.parse_start_site_with_filter)
-                   
-            yield req
+            yield self._default_form_request(url, self.parse_start_site_with_filter, response.meta['commercial'])
              
             
 #    !!! this framework is strange, if I use natural function composition like:
 
 #     def parse_start_site(self, reponse):
-#        do_start_specific_stuff
+#        do_start_specific_stuff -> like property_total_number calculation
 #        self.parse_site(response)
 #
 #     def parse_site(self, reponse): 

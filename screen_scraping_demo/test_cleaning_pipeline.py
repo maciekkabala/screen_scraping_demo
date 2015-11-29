@@ -74,6 +74,17 @@ class TestCleaningPipeline(unittest.TestCase):
         self.assertEqual(type(cleaned_offer['date']), str)
         self.assertEqual(cleaned_offer['date'], (date.today() - timedelta(1)).strftime(self.out_date_format) )
 
+    def testDate_vor_6_month(self):
+#       quoka return sometimes gestern as date; check if pipeline convert it properly
+  
+        pipeline = CleaningPipeline()
+        offer = self._create_default_offer()
+        offer['date'] = "vor 6 Monaten"
+        
+        cleaned_offer = pipeline.process_item(offer, None)
+
+        self.assertEqual(cleaned_offer['date'], None )
+
         
     def testPrice(self):
         pipeline = CleaningPipeline()
