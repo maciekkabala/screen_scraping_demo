@@ -85,6 +85,17 @@ class TestCleaningPipeline(unittest.TestCase):
 
         self.assertEqual(cleaned_offer['date'], None )
 
+    def testDate_some_date(self):
+#       quoka return sometimes gestern as date; check if pipeline convert it properly
+  
+        pipeline = CleaningPipeline()
+        offer = self._create_default_offer()
+        offer['date'] = "28.11.2015"
+        
+        cleaned_offer = pipeline.process_item(offer, None)
+
+        self.assertEqual(cleaned_offer['date'], '28.11.2015' )
+
         
     def testPrice(self):
         pipeline = CleaningPipeline()

@@ -28,19 +28,9 @@ class TestMySqlPipeline(unittest.TestCase):
         columns, values = pipe._get_values_for_sql_insert(item)
         
         today = date.today()
-        self.assertEqual(columns, 'city, offer_title, create_date_on_site, created_at, month')
-        self.assertEqual(values, '"Krakow", "Wawel for sale", "20151005", "%s", "%s"' % (today.strftime('%Y-%m-%d'), today.strftime('%m')) )
+        self.assertEqual(columns, ['city', 'offer_title', 'create_date_on_site', 'created_at', 'month'])
+        self.assertEqual(values, ["Krakow", "Wawel for sale", "20151005", today.strftime('%Y-%m-%d'), today.strftime('%m')] )
 
-    def test_insert_command(self):
-        pipe = MySqlPipeline()
-        item = Offer()
-        item['city'] = 'Krakow' # same name on db
-        item['title'] = 'Wawel for sale' # name on db another than Offer item
-
-        command = pipe._get_insert_command(item)
-       
-        today = date.today()
-        self.assertEqual(command, 'INSERT INTO real_estate_offer(city, offer_title, created_at, month) Values("Krakow", "Wawel for sale", "%s", "%s")' %(today.strftime('%Y-%m-%d'), today.strftime('%m')) ) 
         
 #         TODO: compare db schema with Offer and MySql.offer_2_db_table
 

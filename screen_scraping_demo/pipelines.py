@@ -23,12 +23,12 @@ class CleaningPipeline(object):
             elif item['date'].lower().strip() == 'gestern':
                 item['date'] = (date.today()- timedelta(1)).strftime(self.out_date_format)
             else: #for dates like 'vor 6 Monaten'
-                date_tuple = item['date']
+                date_tuple = item['date'].split('.')
                 if len(date_tuple) == 3:
-                    pass
+                    pass #very simply assumption; it could be even than not valid date
                 else:
                     item['date'] = None
-                 
+                  
         return item
 
 # ORM framework would be much better, especially for support.
@@ -54,7 +54,7 @@ class MySqlPipeline(object):
     
     def _transform_date(self, in_date):
         day, month, year = map(int, in_date.split('.'))
-        return '"%s"' % date(year, month, day).strftime(self.out_date_format)
+        return date(year, month, day).strftime(self.out_date_format)
         
     
     def __init__(self):
@@ -73,7 +73,7 @@ class MySqlPipeline(object):
         if key in self.transformations:
             return self.transformations[key](value)
         else:
-            return "%s" % value
+            return value
 
     def _get_values_for_sql_insert(self, item):
         '''
@@ -96,10 +96,10 @@ class MySqlPipeline(object):
         
         today = date.today()
         column_list.append('created_at')
-        value_list.append('"%s"' % today.strftime('%Y-%m-%d'))
+        value_list.append(today.strftime('%Y-%m-%d'))
         
         column_list.append('month')
-        value_list.append('"%s"' % today.strftime('%m'))
+        value_list.append(today.strftime('%m'))
         
         return column_list, value_list
     
