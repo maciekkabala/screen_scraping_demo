@@ -73,7 +73,7 @@ class MySqlPipeline(object):
         if key in self.transformations:
             return self.transformations[key](value)
         else:
-            return self.con.escape_string(value.encode('utf8', 'replace'))
+            return "%s" % value
 
     def _get_values_for_sql_insert(self, item):
         '''
@@ -101,17 +101,16 @@ class MySqlPipeline(object):
         column_list.append('month')
         value_list.append('"%s"' % today.strftime('%m'))
         
-        return (", ".join(column_list), ", ".join(value_list))
-    
-    def _get_insert_command(self, item):
-        return self.insert_command % self._get_values_for_sql_insert(item)
+        return column_list, value_list
     
     def process_item(self, item, spider):
         try:
             cur = self.con.cursor()
-            command = self._get_insert_command(item)
-    #         print command
-            cur.execute(command)
+            column_list, value_list = self._get_values_for_sql_insert(item)
+            assert len(column_list) == len(value_list)
+            
+            command = self.insert_command % ( ", ".join(column_list), ", ".join(len(value_list) * ["%s"] ) )
+            cur.execute(command, value_list)
             
     #      commit on close, or on process item?
     #      depends on requirement, without specific knowledge I commit at proccess_item

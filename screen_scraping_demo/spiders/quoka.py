@@ -66,7 +66,7 @@ class QuokaSpider(scrapy.Spider):
         """
    
         yield self._default_form_request(self.start_urls[0], self.parse_start_site_with_filter, self.category_commercial)
-#         yield self._default_form_request(self.start_urls[0], self.parse_start_site_with_filter, self.category_private)
+        yield self._default_form_request(self.start_urls[0], self.parse_start_site_with_filter, self.category_private)
 
       
     def get_property_total_number(self, response):
