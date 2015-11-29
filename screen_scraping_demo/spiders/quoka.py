@@ -8,7 +8,9 @@ import scrapy
 from itertools import imap
 from screen_scraping_demo.items import Offer
 
-
+#TODO: distinction commercial/ not commercial offer
+#FIXME: not partner offer => why? Wrong form data?
+#FIXME: a lot of ERROR: Error downloading <...>: An error occurred while connecting: 113: No route to host.  
 
 #My first screen scraping project
 
@@ -124,24 +126,17 @@ class QuokaSpider(scrapy.Spider):
         if len(next_site_list) == 1:
             next_site = next_site_list[0]
             return next_site.xpath('a/@href').extract()[0]
-#             parse next
         elif len(next_site_list) > 1:
             raise ParseError
         else: #0
             pass # do nothing, no next site
 
-    
-#     def parse_site(self, response):
-
             
     def parse_start_site_with_filter(self, response):
- 
+
         property_total_number = self.get_property_total_number(response)
+ 
          
-#         filename = '/tmp/trace.html'
-#         with open(filename, 'wb') as f:
-#             f.write(response.body)
-        
         result_list = response.xpath(self.xpath_offer_list)
 #         imap(self._parse_offer_item, result_list)
 # strange behavior, imap from itertools does not work! This framework do something strange under the bonnet!
@@ -151,14 +146,14 @@ class QuokaSpider(scrapy.Spider):
                 yield res 
         
         next_page = self.get_next_site(response)
-#         if next_page != None:
-#             url = response.urljoin(next_page)
-#             req = scrapy.FormRequest(url,
-#                                  formdata={'classtype': 'of', 'com': 'all'},
-#                                  dont_filter=True, 
-#                                  callback = self.parse_start_site_with_filter)
-#                  
-#             yield req
+        if next_page != None:
+            url = response.urljoin(next_page)
+            req = scrapy.FormRequest(url,
+                                 formdata={'classtype': 'of', 'com': 'all'},
+                                 dont_filter=True, 
+                                 callback = self.parse_start_site_with_filter)
+                  
+            yield req
             
         
 
