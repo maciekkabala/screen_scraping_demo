@@ -155,7 +155,7 @@ class QuokaSpider(scrapy.Spider):
         for item in result_list:
             res =  self._parse_offer_item(response, item)
             if res != None:
-                time.sleep(0.1) #ugly hack -> without I get: Error downloading <...>: An error occurred while connecting: 113: No route to host.
+                time.sleep(0.2) #ugly hack -> without I get: Error downloading <...>: An error occurred while connecting: 113: No route to host.
 # I suppose to many requests -> should be better solution than sleep                
                 yield res 
         
