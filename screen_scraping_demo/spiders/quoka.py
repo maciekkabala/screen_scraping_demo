@@ -7,17 +7,18 @@ Created on 28-11-2015
 import scrapy
 from itertools import imap
 from screen_scraping_demo.items import Offer
+import time
 
 #TODO: distinction commercial/ not commercial offer
-#FIXME: not partner offer => why? Wrong form data?
-#FIXME: a lot of ERROR: Error downloading <...>: An error occurred while connecting: 113: No route to host.  
+#FIXME: no partner offers => why? Wrong form data?
+#FIXME: a lot of ERRORS of type: Error downloading <...>: An error occurred while connecting: 113: No route to host.  
 
 #My first screen scraping project
 
 class ParseError(Exception):
     pass
 
-# First step after "scrapy startproject lot_test"
+# First step after "scrapy startproject screen_scraping_demo"
 class QuokaSpider(scrapy.Spider):
     
     name = "quoka"
@@ -31,20 +32,20 @@ class QuokaSpider(scrapy.Spider):
     xpath_offer_title = '//div[@class="headline"]/h1[@itemprop="name"]/text()'
     xpath_offer_price = '//div[@class="price has-type"]/strong/span/text()'
     xpath_offer_address = '//div[@class="location"]/strong/span[@class="address location"]'
-#     NOT in specification => should not be implemented regarding strong scrum rules
+#     NOT in specification => should not be implemented regarding strong SCRUM rules
 #     => only ordered "things" should be implemented => but this is obvious, a bug in specification
-#    there are offers in CH ... yes yes this is also a country ;-)  
+#    there are offers in CH ... this is also a country ;-)  
     xpath_offer_address_country = 'span/span[@class="country-name country"]/text()'
     xpath_offer_address_postal_code = 'span/span[@class="postal-code"]/text()'
     xpath_offer_address_city = 'a/span/text()'
     xpath_offer_id = '//div[@class="data"]/div[@class="details"]/div[@class="date-and-clicks"]/strong/text()'
     xpath_offer_date = '//div[@class="data"]/div[@class="details"]/div[@class="date-and-clicks"]/text()'
-    xpath_offer_detais = '//div[@class="data"]/div[@class="details"]'
+    xpath_offer_details = '//div[@class="data"]/div[@class="details"]'
 
     def _default_form_request(self, url, callback_meth):
         return scrapy.FormRequest(url, 
-                                 formdata={'classtype': 'of', 'com': 'all'}, #Lot time wasted searching how to do this. Very boring and not interesting task.
-                                 dont_filter=True, #this couse time, not mentioned in tutorial 
+                                 formdata={'classtype': 'of', 'comm': 'all'}, 
+                                 dont_filter=True, #this costed time, not mentioned in tutorial 
                                  callback = callback_meth)
 
     def _default_request(self, url, callback_meth):
@@ -61,7 +62,7 @@ class QuokaSpider(scrapy.Spider):
 
       
     def get_property_total_number(self, response):
-# #       crash xpath course
+# #       crash course in xpath 
 # #       First impression:
 # #       xpath is interesting, but html site introspection is not
         categoryList = response.xpath('//ul[@id="CategoryList"]')
@@ -86,7 +87,7 @@ class QuokaSpider(scrapy.Spider):
         offer['url'] = response.url
         price_list = response.xpath(self.xpath_offer_price).extract()
         if len(price_list) == 1:
-            offer['price'] = price_list[0].replace(',-','').replace('.','') #hack - regex should be better 
+            offer['price'] = price_list[0] 
         elif len(price_list) == 0:
             offer['price'] = None
         else:
@@ -96,8 +97,8 @@ class QuokaSpider(scrapy.Spider):
         offer['postal_code'] = address.xpath(self.xpath_offer_address_postal_code).extract_first()
         offer['city'] = address.xpath(self.xpath_offer_address_city).extract_first()
         
-        offer['obid'] = response.xpath(self.xpath_offer_id).extract_first().strip()
-        offer['details'] = response.xpath(self.xpath_offer_detais)[1].xpath('div/text()').extract_first()
+        offer['obid'] = response.xpath(self.xpath_offer_id).extract_first()
+        offer['details'] = response.xpath(self.xpath_offer_details)[1].xpath('div/text()').extract_first()
 #         TODO: tel number
 
 #       response.xpath(self.xpath_offer_date).extract() contains list of strings, only one is non empty, and is date
@@ -139,10 +140,12 @@ class QuokaSpider(scrapy.Spider):
          
         result_list = response.xpath(self.xpath_offer_list)
 #         imap(self._parse_offer_item, result_list)
-# strange behavior, imap from itertools does not work! This framework do something strange under the bonnet!
+# strange behavior, imap from itertools does not work! This framework does something strange under the bonnet!
         for item in result_list:
             res =  self._parse_offer_item(response, item)
             if res != None:
+                time.sleep(1) #ugly hack -> without I get: Error downloading <...>: An error occurred while connecting: 113: No route to host.
+# I suppose to many requests -> should be better solution than sleep                
                 yield res 
         
         next_page = self.get_next_site(response)
@@ -152,11 +155,9 @@ class QuokaSpider(scrapy.Spider):
                                  formdata={'classtype': 'of', 'com': 'all'},
                                  dont_filter=True, 
                                  callback = self.parse_start_site_with_filter)
-                  
+                   
             yield req
-            
-        
-
+             
             
 #    !!! this framework is strange, if I use natural function composition like:
 

@@ -61,9 +61,10 @@ NEWSPIDER_MODULE = 'screen_scraping_demo.spiders'
 
 # Configure item pipelines
 # See http://scrapy.readthedocs.org/en/latest/topics/item-pipeline.html
-#ITEM_PIPELINES = {
-#    'screen_scraping_demo.pipelines.SomePipeline': 300,
-#}
+ITEM_PIPELINES = {
+    'screen_scraping_demo.pipelines.CleaningPipeline': 300,
+    'screen_scraping_demo.pipelines.MySqlPipeline': 400,
+}
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See http://doc.scrapy.org/en/latest/topics/autothrottle.html
