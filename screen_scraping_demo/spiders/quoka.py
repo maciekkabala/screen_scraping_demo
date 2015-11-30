@@ -8,7 +8,8 @@ import scrapy
 from itertools import imap
 from screen_scraping_demo.items import Offer
 import time
-
+import json
+import jsonurl
 #TODO: distinction commercial/ not commercial offer
 #FIXME: no partner offers => why? Wrong form data?
 #FIXME: a lot of ERRORS of type: Error downloading <...>: An error occurred while connecting: 113: No route to host.  
@@ -61,6 +62,11 @@ class QuokaSpider(scrapy.Spider):
         return scrapy.Request(url,
                               dont_filter=True, #easy to forget 
                               callback=callback_meth)    
+
+    def __init__(self, *args, **kwargs):
+        super(QuokaSpider, self).__init__(*args, **kwargs)
+        self._partnerOfferParsed = False 
+        
 
     def parse(self, response):
         """ Parse start site.
@@ -164,11 +170,6 @@ class QuokaSpider(scrapy.Spider):
             req =  self._default_request(response.urljoin(link), self.parse_offer)
             req.meta.update(response.meta)
             return req    
-             
-        elif 'q-ln t1 partner' in offer_item.xpath('@class').extract():
-            item = Offer()
-            item['title'] = 'partner' #TODO
-            return offer_item
 
     def get_next_site(self, response):
         next_site_list = response.xpath('//li[@class="arr-rgt active"]')
@@ -180,11 +181,59 @@ class QuokaSpider(scrapy.Spider):
         else: #0
             pass # do nothing, no next site
 
+    
+    def _get_parter_offer_url(self, response):
+        partner_offer_js_list = filter(lambda x: 'getJSON' in x.extract(), response.xpath('//script[@type="text/javascript"]'))
+        if len(partner_offer_js_list) == 1:
+            partner_offer_js = partner_offer_js_list[0].xpath('text()').extract()[0]
+#            very ugly fast implementation => regex should be used 
+            start_params_pos = partner_offer_js.find('getJSON')
+            start_params_pos = start_params_pos + len('getJSON')
+            self.logger.debug(start_params_pos)
+            
+            end_dict_pos = partner_offer_js.find('}', start_params_pos)      
+            assert end_dict_pos > start_params_pos
+            
+            first_comma = partner_offer_js.find(',', start_params_pos)
+            
+            first_param =  partner_offer_js[start_params_pos: first_comma].replace("'","").strip()[1:]
+            param_dict_string = partner_offer_js[first_comma+1: end_dict_pos+1].strip()
+
+            query_string = jsonurl.query_string(json.loads(param_dict_string))
+            url = first_param +'?' + query_string
+            return url.strip()
+        elif len(partner_offer_js_list) == 0:
+            self.logger.debug("No js fot partner offers")
+        else:
+            raise ParseError
+            
+    def parse_partner_offers(self, response):
+        json_obj = json.loads(response.body)
+        provider_id = 1 # could be better taken from json_obj['infoPartnerName'], but in specification this field on DB is only numerical 
+        self.logger.debug(len(json_obj['result']))
+        for item in  json_obj['result']:
+            offer = Offer()
+            valueOrNone = lambda key: item[key] if key in item else None
+            offer['provider_id'] = provider_id
+            offer['title'] = valueOrNone('title')
+            offer['details'] = valueOrNone('description')
+            offer['url'] = valueOrNone('urlClick')
+            offer['price'] = valueOrNone('priceProduct')
+            offer['city'] = valueOrNone('locationCity')
+            offer['postal_code'] = valueOrNone('locationZipCode')
+            yield offer
+             
             
     def parse_start_site_with_filter(self, response):
 
         property_total_number = self.get_property_total_number(response) #TODO always parsed, not only in start site!
- 
+        partner_url = self._get_parter_offer_url(response)
+        if partner_url != None: 
+            self.logger.debug(partner_url)
+            if self._partnerOfferParsed == False:
+                self._partnerOfferParsed = True #do this only once
+                yield self._default_request(partner_url, self.parse_partner_offers)
+        
          
         result_list = response.xpath(self.xpath_offer_list)
 #         imap(self._parse_offer_item, result_list)
@@ -195,7 +244,7 @@ class QuokaSpider(scrapy.Spider):
                 time.sleep(0.3) #ugly hack -> without I get: Error downloading <...>: An error occurred while connecting: 113: No route to host.
 # I suppose to many requests -> should be better solution than sleep                
                 yield res 
-        
+          
         next_page = self.get_next_site(response)
         if next_page != None:
             url = response.urljoin(next_page)

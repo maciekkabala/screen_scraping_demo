@@ -21,3 +21,4 @@ class Offer(scrapy.Item):
     details = scrapy.Field()
     commercial = scrapy.Field()
     phone_number = scrapy.Field()
+    provider_id = scrapy.Field()

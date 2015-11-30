@@ -13,7 +13,9 @@ class CleaningPipeline(object):
     out_date_format = "%d.%m.%Y"
 
     def process_item(self, item, spider):
-        item['obid'] = item['obid'].strip() 
+        if 'obid' in item:
+            item['obid'] = item['obid'].strip()
+             
         if 'price' in item and item['price'] != None:
             item['price'] = item['price'].replace(',-','').replace('.','') #hack - regex should be better
         
