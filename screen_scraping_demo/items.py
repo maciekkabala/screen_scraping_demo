@@ -20,3 +20,4 @@ class Offer(scrapy.Item):
     date = scrapy.Field()
     details = scrapy.Field()
     commercial = scrapy.Field()
+    phone_number = scrapy.Field()

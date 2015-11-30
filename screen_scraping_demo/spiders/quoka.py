@@ -41,6 +41,8 @@ class QuokaSpider(scrapy.Spider):
     xpath_offer_id = '//div[@class="data"]/div[@class="details"]/div[@class="date-and-clicks"]/strong/text()'
     xpath_offer_date = '//div[@class="data"]/div[@class="details"]/div[@class="date-and-clicks"]/text()'
     xpath_offer_details = '//div[@class="data"]/div[@class="details"]'
+    xpath_offer_tel_num_url = '//a[@id="dspphone1"]/@onclick'
+    xpath_offer_tel_num = '//span/text()'
     
     category_commercial = '1'
     category_private = '0'
@@ -58,7 +60,7 @@ class QuokaSpider(scrapy.Spider):
     def _default_request(self, url, callback_meth):
         return scrapy.Request(url,
                               dont_filter=True, #easy to forget 
-                              callback=self.parse_offer)    
+                              callback=callback_meth)    
 
     def parse(self, response):
         """ Parse start site.
@@ -89,6 +91,34 @@ class QuokaSpider(scrapy.Spider):
         
         return property_total_number
 
+#        overall time spent on telephone: 20 minutes 
+    def _get_tel_num_url(self, response):
+        tel_num_raw_list = response.xpath(self.xpath_offer_tel_num_url).extract()
+        if len(tel_num_raw_list) == 1:
+            tel_num_raw = tel_num_raw_list[0]
+            prefix_and_tel_num_url_raw = tel_num_raw.split('.load')
+            if len(prefix_and_tel_num_url_raw) == 2:
+                tel_num_req_raw = prefix_and_tel_num_url_raw[1]
+                #tel_num_req look like (  'url' )
+                # drop '(' ')' than strip and omit "'"
+                tel_num_url = tel_num_req_raw.replace('(','').replace(')','').strip()[1:-1] 
+                return tel_num_url  
+            else:
+                raise ParseError
+                
+            self.logger.debug(tel_num_raw)
+        elif len(tel_num_raw_list) > 1:
+            raise ParseError
+        else:
+            pass # no phone number
+
+    def create_tel_num_parser(self, offer):
+        def parse_tel_num(response):
+            tel_num = response.xpath(self.xpath_offer_tel_num).extract()
+            offer['phone_number'] = tel_num[0]
+            yield offer
+        return parse_tel_num
+    
     def parse_offer(self, response):
         offer = Offer()
         offer['title'] = response.xpath(self.xpath_offer_title).extract()[0]
@@ -107,7 +137,6 @@ class QuokaSpider(scrapy.Spider):
         
         offer['obid'] = response.xpath(self.xpath_offer_id).extract_first()
         offer['details'] = response.xpath(self.xpath_offer_details)[1].xpath('div/text()').extract_first()
-#         TODO: tel number
 
 #       response.xpath(self.xpath_offer_date).extract() contains list of strings, only one is non empty, and is date
 #       alternative implementetion => filter(lambda x: len(x) > 0, map(lambda x: x.strip(), response.xpath(self.xpath_offer_date).extract()))
@@ -116,7 +145,15 @@ class QuokaSpider(scrapy.Spider):
             offer['date'] = date_list[0] 
             
         offer['commercial'] = response.meta['commercial']
-        yield offer
+
+        tel_num_url = self._get_tel_num_url(response)
+        if tel_num_url == None:
+            self.logger.debug("no tel number")
+            yield offer
+        else:
+            req =  self._default_request(response.urljoin(tel_num_url), self.create_tel_num_parser(offer))
+            yield req
+            
 
     def _parse_offer_item(self, response, offer_item):
         if 'q-ln hlisting' in offer_item.xpath('@class').extract():
@@ -155,7 +192,7 @@ class QuokaSpider(scrapy.Spider):
         for item in result_list:
             res =  self._parse_offer_item(response, item)
             if res != None:
-                time.sleep(0.2) #ugly hack -> without I get: Error downloading <...>: An error occurred while connecting: 113: No route to host.
+                time.sleep(0.3) #ugly hack -> without I get: Error downloading <...>: An error occurred while connecting: 113: No route to host.
 # I suppose to many requests -> should be better solution than sleep                
                 yield res 
         
